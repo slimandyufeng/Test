@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GrapesJS 自定义 Layers 面板 (Vue版)</title>
+  <!-- 引入 GrapesJS 样式 -->
+  <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+  <!-- 引入 Vue.js -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    #editor-container {
+      display: flex;
+      height: 100vh;
+    }
+    
+    #gjs {
+      flex-grow: 1;
+      height: 100%;
+    }
+    
+    #custom-layers-container {
+      width: 300px;
+      background-color: #f5f5f5;
+      border-left: 1px solid #ddd;
+      padding: 15px;
+      overflow-y: auto;
+    }
+
+    .layer-manager {
+      width: 100%;
+    }
+    
+    .toggle-layers-btn {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      padding: 8px 12px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    /* 图层项样式 */
+    .layer-item {
+      position: relative;
+      padding: 5px 5px 5px 25px;
+      background-color: rgba(0, 0, 0, 0.05);
+      border-radius: 2px;
+      margin-bottom: 2px;
+    }
+    
+    .layer-item.selected {
+      background-color: rgba(66, 133, 244, 0.2);
+    }
+    
+    .layer-item.hovered {
+      background-color: rgba(66, 133, 244, 0.1);
+    }
+    
+    .layer-item .layer-caret {
+      position: absolute;
+      left: 5px;
+      cursor: pointer;
+      width: 15px;
+      text-align: center;
+    }
+    
+    .layer-item .layer-vis {
+      position: absolute;
+      right: 5px;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    
+    .layer-item .layer-vis:hover {
+      opacity: 1;
+    }
+
+    .layer-item .layer-title {
+      cursor: default;
+      display: inline-block;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    
+    .layer-item .layer-title[contenteditable=true] {
+      outline: none;
+      background-color: rgba(255, 255, 255, 0.5);
+    }
+    
+    .layer-drag-indicator {
+      position: absolute;
+      pointer-events: none;
+      width: 100%;
+      height: 2px;
+      background-color: #4285f4;
+    }
+    
+    .layer-children {
+      padding-left: 10px;
+    }
+    
+    .drag-handle {
+      cursor: move;
+      margin-right: 5px;
+      opacity: 0.4;
+    }
+    
+    .drag-handle:hover {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor-container">
+    <div id="gjs">
+      <div class="container">
+        <div class="header">
+          <h1>GrapesJS 示例</h1>
+        </div>
+        <div class="content">
+          <p>这是内容区域，您可以在这里添加更多内容。</p>
+          <button class="btn">点击我</button>
+        </div>
+      </div>
+    </div>
+    <div id="custom-layers-container">
+      <div class="panel-title">自定义图层面板 (Vue版)</div>
+      <div id="layers-container"></div>
+    </div>
+  </div>
+  
+  <!-- Vue 组件模板 -->
+  <script type="text/x-template" id="layer-item-template">
+    <div>
+      <div 
+        :class="['layer-item', { selected, hovered }]" 
+        :style="{ paddingLeft: 15 + level * 10 + 'px' }"
+        @mouseover="setHover(true)" 
+        @mouseout="setHover(false)"
+        @click="setSelected"
+        data-layer-item
+        ref="layerRef"
+      >
+        <span v-if="components.length" class="layer-caret" @click.stop="toggleOpen">
+          {{ open ? '▼' : '►' }}
+        </span>
+        <span class="drag-handle" data-layer-move>⠿</span>
+        <span 
+          ref="nameInput"
+          class="layer-title"
+          :contenteditable="editing"
+          @dblclick="setEditing(true)"
+          @blur="setEditing(false)"
+          @keydown.enter="setEditing(false)"
+        >{{ name }}</span>
+        <span class="layer-vis" @click.stop="toggleVisibility">
+          {{ visible ? '👁️' : '👁️‍🗨️' }}
+        </span>
+      </div>
+      <div class="layer-children" v-if="open && components.length">
+        <layer-item 
+          v-for="component in components" 
+          :key="component.cid"
+          :component="component"
+          :level="level + 1"
+        ></layer-item>
+      </div>
+    </div>
+  </script>
+
+  <!-- 引入 GrapesJS 脚本 -->
+  <script src="https://unpkg.com/grapesjs"></script>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 初始化 GrapesJS 编辑器
+      const editor = grapesjs.init({
+        container: '#gjs',
+        fromElement: true,
+        height: '100%',
+        storageManager: false,
+        noticeOnUnload: false,
+        layerManager: { custom: true },
+        panels: { defaults: [] }, // 隐藏默认面板
+        // 添加一些基本样式
+        style: `
+          .container { padding: 20px; }
+          .header { margin-bottom: 20px; }
+          .content { padding: 15px; background-color: #f9f9f9; }
+          .btn { padding: 8px 16px; background-color: #4285f4; color: white; border: none; cursor: pointer; }
+        `
+      });
+      
+      const { Components, Layers } = editor;
+      const cmpElMap = new WeakMap();
+
+      // Layer item component
+      Vue.component('layer-item', {
+        template: '#layer-item-template',
+        props: { component: Object, level: Number },
+        data() {
+          return {
+            name: '',
+            components: [],
+            visible: true,
+            open: false,
+            selected: false,
+            hovered: false,
+            editing: false,
+          }
+        },
+        mounted() {
+          this.updateLayer(Layers.getLayerData(this.component));
+          cmpElMap.set(this.$refs.layerRef, this.component);
+          editor.on('layer:component', this.onLayerComponentUpdate);
+        },
+        destroyed() {
+          editor.off('layer:component', this.onLayerComponentUpdate);
+        },
+        methods: {
+          onLayerComponentUpdate(cmp) {
+            if (cmp === this.component) {
+              this.updateLayer(Layers.getLayerData(cmp));
+            }
+          },
+          updateLayer(data) {
+            this.name = data.name;
+            this.components = data.components;
+            this.visible = data.visible;
+            this.open = data.open;
+            this.selected = data.selected;
+            this.hovered = data.hovered;
+          },
+          toggleVisibility() {
+            const { component } = this;
+            Layers.setVisible(this.component, !this.visible);
+          },
+          toggleOpen() {
+            const { component } = this;
+            Layers.setOpen(this.component, !this.open);
+          },
+          setHover(hovered) {
+            Layers.setLayerData(this.component, { hovered })
+          },
+          setSelected(event) {
+            Layers.setLayerData(this.component, { selected: true }, { event })
+          },
+          setEditing(value) {
+            this.editing = value;
+            const el = this.$refs.nameInput;
+            if (!value) {
+              Layers.setName(this.component, el.innerText)
+            } else {
+              setTimeout(() => el.focus())
+            }
+          },
+        }
+      });
+
+      // 创建图层管理器容器
+      const layerManagerEl = document.createElement('div');
+      layerManagerEl.className = 'layer-manager';
+      document.getElementById('layers-container').appendChild(layerManagerEl);
+
+      // Load the Vue app
+      const app = new Vue({
+        el: '.layer-manager',
+        data: {
+          root: null,
+          isDragging: false,
+          draggingCmp: null,
+          draggingOverCmp: null,
+          dragIndicator: {},
+          canMoveRes: {},
+        },
+        template: `
+          <div 
+            @mousedown="onDragStart" 
+            @mousemove="onDragMove" 
+            @mouseup="onDragEnd"
+            @mouseleave="onDragEnd"
+          >
+            <div 
+              v-if="dragIndicator.show" 
+              class="layer-drag-indicator" 
+              :style="{ top: dragIndicator.y + 'px', left: dragIndicator.offset + 'px', right: '5px' }"
+            ></div>
+            <layer-item 
+              v-if="root" 
+              :component="root" 
+              :level="0"
+            ></layer-item>
+          </div>
+        `,
+        mounted() {
+          editor.on('layer:custom', this.handleCustom);
+          editor.on('layer:root', this.handleRootChange);
+        },
+        destroyed() {
+          editor.off('layer:custom', this.handleCustom);
+          editor.off('layer:root', this.handleRootChange);
+        },
+        methods: {
+          handleCustom(props = {}) {
+            const { container, root } = props;
+            this.handleRootChange(root);
+          },
+          handleRootChange(root) {
+            console.log('root update', root);
+            this.root = root;
+          },
+          getDragTarget(ev) {
+            const el = document.elementFromPoint(ev.clientX, ev.clientY);
+            const dragEl = el.closest('[data-layer-move]');
+            const elLayer = el.closest('[data-layer-item]');
+
+            return {
+                dragEl,
+                elLayer,
+                cmp: cmpElMap.get(elLayer),
+            }
+          },
+          onDragStart(ev) {
+            if (this.getDragTarget(ev).dragEl) {
+              this.isDragging = true;
+            }
+          },
+          onDragMove(ev) {
+            if (!this.isDragging) return;
+            const { cmp, elLayer } = this.getDragTarget(ev);
+            if (!cmp || !elLayer) return;
+            const { draggingCmp } = this;
+            const layerRect = elLayer.getBoundingClientRect();
+            const layerH = elLayer.offsetHeight;
+            const layerY = elLayer.offsetTop;
+            const pointerY = ev.clientY;
+            const isBefore = pointerY < (layerRect.y + layerH / 2);
+            const cmpSource = !draggingCmp ? cmp : draggingCmp;
+            const cmpTarget = cmp.parent();
+            const cmpIndex = cmp.index() + (isBefore ? 0 : 1);
+            this.draggingCmp = !draggingCmp ? cmp : draggingCmp;
+            this.draggingOverCmp = cmp;
+            const canMove = Components.canMove(cmpTarget, cmpSource, cmpIndex);
+            const canMoveRes = { ...canMove, index: cmpIndex };
+            this.canMoveRes = canMoveRes;
+            const dragLevel = (cmp ? cmp.parents() : []).length;
+            this.dragIndicator = {
+                y: layerY + (isBefore ? 0 : layerH),
+                h: layerH,
+                offset: dragLevel * 10 + 20,
+                show: !!(this.draggingCmp && canMoveRes.result),
+            };
+          },
+          onDragEnd(ev) {
+            const { canMoveRes } = this;
+            canMoveRes.result && canMoveRes.source.move(canMoveRes.target, { at: canMoveRes.index });
+            this.isDragging = false;
+            this.draggingCmp = null;
+            this.draggingOverCmp = null;
+            this.dragIndicator = {};
+            this.canMoveRes = {};
+          },
+        }
+      });
+      
+      // 手动触发layer:custom事件
+      editor.trigger('layer:custom', { container: layerManagerEl, root: Components.getWrapper() });
+      
+      console.log('GrapesJS 编辑器已初始化，Vue图层管理器已加载');
+    });
+  </script>
+</body>
+</html> 
