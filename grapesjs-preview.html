@@ -39,22 +39,83 @@
       transition: all 0.3s ease;
     }
     
-    .start-preview-btn {
+    .preview-btn.green {
       background-color: #4CAF50;
       color: white;
     }
     
-    .start-preview-btn:hover {
+    .preview-btn.green:hover {
       background-color: #3e8e41;
     }
     
-    .stop-preview-btn {
+    .preview-btn.blue {
+      background-color: #2196F3;
+      color: white;
+    }
+    
+    .preview-btn.blue:hover {
+      background-color: #0b7dda;
+    }
+    
+    .preview-btn.red {
       background-color: #f44336;
       color: white;
     }
     
-    .stop-preview-btn:hover {
+    .preview-btn.red:hover {
       background-color: #d32f2f;
+    }
+    
+    /* 非全屏预览样式 */
+    .partial-preview-frame {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 80%;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
+      overflow: auto;
+    }
+    
+    .partial-preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 15px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .partial-preview-title {
+      font-weight: bold;
+      font-size: 16px;
+    }
+    
+    .partial-preview-close {
+      cursor: pointer;
+      font-size: 22px;
+      color: #777;
+    }
+    
+    .partial-preview-content {
+      padding: 15px;
+      height: calc(100% - 50px);
+      overflow: auto;
+    }
+    
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
     }
   </style>
 </head>
@@ -73,8 +134,9 @@
     </div>
     
     <div class="preview-controls">
-      <button id="start-preview" class="preview-btn start-preview-btn">开启预览</button>
-      <button id="stop-preview" class="preview-btn stop-preview-btn">关闭预览</button>
+      <button id="full-preview" class="preview-btn green">全屏预览</button>
+      <button id="partial-preview" class="preview-btn blue">弹窗预览</button>
+      <button id="stop-preview" class="preview-btn red">关闭预览</button>
     </div>
   </div>
 
@@ -100,18 +162,123 @@
       });
       
       // 获取预览按钮
-      const startPreviewBtn = document.getElementById('start-preview');
+      const fullPreviewBtn = document.getElementById('full-preview');
+      const partialPreviewBtn = document.getElementById('partial-preview');
       const stopPreviewBtn = document.getElementById('stop-preview');
       
-      // 添加预览按钮点击事件
-      startPreviewBtn.addEventListener('click', function() {
+      // 定义非全屏预览窗口元素
+      let partialPreviewFrame = null;
+      let overlayElement = null;
+      
+      // 全屏预览
+      fullPreviewBtn.addEventListener('click', function() {
+        // 关闭可能存在的非全屏预览
+        closePartialPreview();
+        // 运行GrapesJS自带的预览命令
         editor.Commands.run('preview');
-        console.log('预览模式已开启');
+        console.log('全屏预览模式已开启');
       });
       
+      // 非全屏预览
+      partialPreviewBtn.addEventListener('click', function() {
+        // 获取当前编辑的HTML
+        const html = editor.getHtml();
+        const css = editor.getCss();
+        
+        // 创建遮罩层
+        overlayElement = document.createElement('div');
+        overlayElement.className = 'overlay';
+        document.body.appendChild(overlayElement);
+        
+        // 创建预览窗口
+        partialPreviewFrame = document.createElement('div');
+        partialPreviewFrame.className = 'partial-preview-frame';
+        
+        // 创建预览窗口头部
+        const previewHeader = document.createElement('div');
+        previewHeader.className = 'partial-preview-header';
+        
+        const previewTitle = document.createElement('div');
+        previewTitle.className = 'partial-preview-title';
+        previewTitle.textContent = '预览';
+        
+        const previewClose = document.createElement('div');
+        previewClose.className = 'partial-preview-close';
+        previewClose.innerHTML = '&times;';
+        previewClose.onclick = closePartialPreview;
+        
+        previewHeader.appendChild(previewTitle);
+        previewHeader.appendChild(previewClose);
+        
+        // 创建预览内容区域
+        const previewContent = document.createElement('div');
+        previewContent.className = 'partial-preview-content';
+        
+        // 将HTML内容放入iframe以隔离样式
+        const iframe = document.createElement('iframe');
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        
+        previewContent.appendChild(iframe);
+        
+        // 组装预览窗口
+        partialPreviewFrame.appendChild(previewHeader);
+        partialPreviewFrame.appendChild(previewContent);
+        
+        // 添加到文档
+        document.body.appendChild(partialPreviewFrame);
+        
+        // 设置iframe内容
+        setTimeout(() => {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <style>${css}</style>
+            </head>
+            <body>
+              ${html}
+            </body>
+            </html>
+          `);
+          iframeDoc.close();
+        }, 100);
+        
+        console.log('弹窗预览模式已开启');
+      });
+      
+      // 关闭非全屏预览
+      function closePartialPreview() {
+        if (partialPreviewFrame) {
+          document.body.removeChild(partialPreviewFrame);
+          partialPreviewFrame = null;
+        }
+        
+        if (overlayElement) {
+          document.body.removeChild(overlayElement);
+          overlayElement = null;
+        }
+      }
+      
+      // 关闭预览
       stopPreviewBtn.addEventListener('click', function() {
+        // 关闭全屏预览
         editor.Commands.stop('preview');
+        
+        // 关闭非全屏预览
+        closePartialPreview();
+        
         console.log('预览模式已关闭');
+      });
+      
+      // 点击遮罩层也关闭预览
+      document.addEventListener('click', function(e) {
+        if (e.target.className === 'overlay') {
+          closePartialPreview();
+        }
       });
       
       console.log('GrapesJS 编辑器已初始化，预览功能已加载');
