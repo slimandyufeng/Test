@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GrapesJS 预览功能</title>
+  <!-- 引入 GrapesJS 样式 -->
+  <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    #editor-container {
+      height: 100vh;
+      position: relative;
+    }
+    
+    #gjs {
+      height: 100%;
+    }
+    
+    .preview-controls {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 100;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .preview-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+    
+    .start-preview-btn {
+      background-color: #4CAF50;
+      color: white;
+    }
+    
+    .start-preview-btn:hover {
+      background-color: #3e8e41;
+    }
+    
+    .stop-preview-btn {
+      background-color: #f44336;
+      color: white;
+    }
+    
+    .stop-preview-btn:hover {
+      background-color: #d32f2f;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor-container">
+    <div id="gjs">
+      <div class="container">
+        <div class="header">
+          <h1>GrapesJS 预览示例</h1>
+        </div>
+        <div class="content">
+          <p>这是内容区域，您可以在这里添加更多内容。</p>
+          <button class="btn">点击我</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="preview-controls">
+      <button id="start-preview" class="preview-btn start-preview-btn">开启预览</button>
+      <button id="stop-preview" class="preview-btn stop-preview-btn">关闭预览</button>
+    </div>
+  </div>
+
+  <!-- 引入 GrapesJS 脚本 -->
+  <script src="https://unpkg.com/grapesjs"></script>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 初始化 GrapesJS 编辑器
+      const editor = grapesjs.init({
+        container: '#gjs',
+        fromElement: true,
+        height: '100%',
+        storageManager: false,
+        noticeOnUnload: false,
+        // 添加一些基本样式
+        style: `
+          .container { padding: 20px; }
+          .header { margin-bottom: 20px; }
+          .content { padding: 15px; background-color: #f9f9f9; }
+          .btn { padding: 8px 16px; background-color: #4285f4; color: white; border: none; cursor: pointer; }
+        `
+      });
+      
+      // 获取预览按钮
+      const startPreviewBtn = document.getElementById('start-preview');
+      const stopPreviewBtn = document.getElementById('stop-preview');
+      
+      // 添加预览按钮点击事件
+      startPreviewBtn.addEventListener('click', function() {
+        editor.Commands.run('preview');
+        console.log('预览模式已开启');
+      });
+      
+      stopPreviewBtn.addEventListener('click', function() {
+        editor.Commands.stop('preview');
+        console.log('预览模式已关闭');
+      });
+      
+      console.log('GrapesJS 编辑器已初始化，预览功能已加载');
+    });
+  </script>
+</body>
+</html> 
